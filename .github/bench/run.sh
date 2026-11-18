@@ -4,6 +4,14 @@ set -eo pipefail
 source "$(dirname "$0")/lib.sh"
 cd "$GITHUB_WORKSPACE"
 LOGS="$BENCH_OUT/logs"; mkdir -p "$LOGS"
+# Make.py runs Bazel with PATH=/usr/bin:/bin:/usr/sbin:/sbin, so a Build Cache credential helper given by bare
+# name in ~/.bazelrc is never found and the remote cache fails to start. Point it at the binary's full path.
+if [ -f "$HOME/.bazelrc" ] && grep -q 'credential_helper=.*=bitrise-build-cache$' "$HOME/.bazelrc"; then
+  BBC_PATH="${BBC:-$(command -v bitrise-build-cache || true)}"
+  [ -x "$BBC_PATH" ] || { echo "❌ bitrise-build-cache not found for the Bazel credential helper"; exit 1; }
+  sed -i.bak "s#credential_helper=\(.*\)=bitrise-build-cache\$#credential_helper=\1=$BBC_PATH#" "$HOME/.bazelrc"
+  echo "Bazel credential helper -> $BBC_PATH"
+fi
 case "$TG_CONFIGURATION" in release_*) TG_METRIC=clean_build_release ;; *) TG_METRIC=clean_build_debug ;; esac
 
 timed_build() { # $1 = log
